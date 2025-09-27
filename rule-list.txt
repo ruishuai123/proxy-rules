@@ -1,0 +1,9 @@
+https://github.com/DustinWin/ruleset_geodata/releases/download/sing-box-ruleset/apple-cn.json
+https://github.com/DustinWin/ruleset_geodata/releases/download/sing-box-ruleset/applications.json
+https://github.com/DustinWin/ruleset_geodata/releases/download/sing-box-ruleset/cn.json
+https://github.com/DustinWin/ruleset_geodata/releases/download/sing-box-ruleset/fakeip-filter.json
+https://github.com/DustinWin/ruleset_geodata/releases/download/sing-box-ruleset/games-cn.json
+https://github.com/DustinWin/ruleset_geodata/releases/download/sing-box-ruleset/google-cn.json
+https://github.com/DustinWin/ruleset_geodata/releases/download/sing-box-ruleset/microsoft-cn.json
+https://github.com/DustinWin/ruleset_geodata/releases/download/sing-box-ruleset/private.json
+https://github.com/DustinWin/ruleset_geodata/releases/download/sing-box-ruleset/trackerslist.json
