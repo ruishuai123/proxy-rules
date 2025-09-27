@@ -1,0 +1,2 @@
+https://github.com/DustinWin/ruleset_geodata/releases/download/sing-box-ruleset/cnip.json
+https://github.com/DustinWin/ruleset_geodata/releases/download/sing-box-ruleset/privateip.json
