@@ -10,10 +10,9 @@ on:
   schedule:
     # 这里的 '0 21 * * *' 代表 UTC 时间的晚上 21:00
     # 这对应北京时间 (UTC+8) 的第二天早上 5:00
-    # 如果你想修改时间，可以调整这个值
     - cron: '0 21 * * *'
   
-  # 当 main 分支有 push 事件时也触发 (可选，如果你希望修改json文件后立即构建，就保留这部分)
+  # 当 main 分支有 push 事件时也触发 (可选)
   push:
     branches:
       - main
@@ -30,18 +29,17 @@ jobs:
     # 定义任务中的各个步骤
     steps:
       # 步骤1：检出你的仓库代码
-      # 目的是让工作流能够访问到你的 rule-list.txt, *.json 等文件
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # 步骤2：下载并设置 sing-box 编译工具
       - name: Download and setup sing-box
         run: |
-          echo "Downloading sing-box..."
-          # 从 GitHub Releases 下载最新的稳定版 sing-box (请根据需要更新版本号)
-          wget -O sing-box.tar.gz "https://github.com/SagerNet/sing-box/releases/download/v1.9.0-rc.5/sing-box-1.9.0-rc.5-linux-amd64.tar.gz"
+          echo "Fetching the latest sing-box version..."
+          LATEST_URL=$(curl -s "https://api.github.com/repos/SagerNet/sing-box/releases/latest" | jq -r '.assets[] | .browser_download_url' | grep 'linux-amd64.tar.gz')
+          echo "Downloading from: $LATEST_URL"
+          wget -O sing-box.tar.gz "$LATEST_URL"
           tar -xzf sing-box.tar.gz
-          # 将解压后的可执行文件移动到当前目录，方便后续直接调用
           mv sing-box-*/sing-box ./sing-box
           chmod +x ./sing-box
           echo "sing-box setup complete. Version:"
@@ -57,53 +55,57 @@ jobs:
       - name: Build direct-ip.srs
         run: |
           echo "Building direct-ip.srs..."
-          # 从 rule-list-ip.txt 下载上游规则到临时目录
           wget -P ./rules/direct-ip -i ./rule-list-ip.txt
-          # 将你自己的本地规则文件也复制进去
           cp ./direct-ip.json ./rules/direct-ip/
-          echo "Compiling all IP rules..."
-          # 使用 sing-box 编译整个目录
-          ./sing-box rule-set compile -i ./rules/direct-ip -o direct-ip.srs
+          cd ./rules/direct-ip
+          jq -s 'map(.rules) | add | { "version": 1, "rules": . }' *.json > entry-ip.json
+          cd ../..
+          echo "Compiling all IP rules from merged entry file..."
+          ./sing-box rule-set compile ./rules/direct-ip/entry-ip.json -o direct-ip.srs
           echo "direct-ip.srs built successfully."
 
       # 步骤5：构建 direct-domain.srs
       - name: Build direct-domain.srs
         run: |
           echo "Building direct-domain.srs..."
-          # 从 rule-list.txt 下载上游规则到临时目录
           wget -P ./rules/direct-domain -i ./rule-list.txt
-          # 将你自己的本地规则文件也复制进去
           cp ./direct-domain.json ./rules/direct-domain/
-          echo "Compiling all domain rules..."
-          # 使用 sing-box 编译整个目录
-          ./sing-box rule-set compile -i ./rules/direct-domain -o direct-domain.srs
+          cd ./rules/direct-domain
+          jq -s 'map(.rules) | add | { "version": 1, "rules": . }' *.json > entry-domain.json
+          cd ../..
+          echo "Compiling all domain rules from merged entry file..."
+          ./sing-box rule-set compile ./rules/direct-domain/entry-domain.json -o direct-domain.srs
           echo "direct-domain.srs built successfully."
 
-      # 步骤6：构建 proxy-domain.srs 和 proxy-ip.srs
+      # 步骤6：构建 proxy rules
       - name: Build proxy rules
         run: |
           echo "Building proxy rules..."
-          # 这两个比较简单，直接指定输入文件即可
-          ./sing-box rule-set compile -i ./proxy-domain.json -o proxy-domain.srs
-          ./sing-box rule-set compile -i ./proxy-ip.json -o proxy-ip.srs
+          ./sing-box rule-set compile ./proxy-domain.json -o proxy-domain.srs
           echo "Proxy rules built successfully."
 
-      # 步骤7：提交所有生成的 .srs 文件到仓库
-      - name: Commit and push generated files
-        run: |
-          # 配置 git 用户信息
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          
-          # 将所有生成的 srs 文件添加到暂存区
-          git add direct-ip.srs direct-domain.srs proxy-domain.srs proxy-ip.srs
-          
-          # 检查是否有文件变动。如果没有变动（即上游规则和你自己的规则都没更新），则不执行提交
-          if git diff --staged --quiet; then
-            echo "No changes detected. Nothing to commit."
-          else
-            # 如果有变动，则创建提交并推送到 main 分支
-            git commit -m "chore(bot): Auto update sing-box rulesets"
-            git push
-            echo "New rulesets have been committed and pushed to the repository."
-          fi
+      # 步骤7：创建 Release 并上传规则文件
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          # 使用日期和时间生成一个唯一的标签，例如 `ruleset-2025-09-27-09-30`
+          tag_name: "ruleset-${{ env.RELEASE_DATE }}"
+          # Release 的标题
+          name: "Ruleset Build - ${{ env.RELEASE_DATE }}"
+          # Release 的描述内容
+          body: |
+            这是由 GitHub Actions 自动构建的 Sing-box 规则集。
+            包含以下文件：
+            - direct-ip.srs
+            - direct-domain.srs
+            - proxy-domain.srs
+          # 指定要上传的文件列表
+          files: |
+            direct-ip.srs
+            direct-domain.srs
+            proxy-domain.srs
+        env:
+          # 设置一个环境变量来存储当前的日期和时间
+          RELEASE_DATE: $(date +'%Y-%m-%d-%H-%M')
+          # GitHub Actions 会自动提供这个 token，用于授权
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
